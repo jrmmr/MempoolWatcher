@@ -11,7 +11,7 @@ let node = MempoolWatcher::new("225.0.0.1:1234");
 
     if let Ok(receiver) = node.start() {
         loop {
-            if let Ok(event) = receiver.recv() {
+            if let Some(event) = receiver.recv().await {
                 match event {
                     // get Trx, Trx may contains several messages
                     MempoolEvent::NewTrx(_trx, _raw_trx) => {}
