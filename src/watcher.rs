@@ -1,17 +1,17 @@
 use std::{
     net::{Ipv4Addr, SocketAddrV4},
-    sync::mpsc::{self, Receiver, Sender},
 };
 
 use anyhow::Result;
 use serde_json::Value;
 use socket2::{Domain, Protocol, Socket, Type};
-use tokio::net::UdpSocket;
+use tokio::{net::UdpSocket, sync::mpsc::{self, UnboundedReceiver, UnboundedSender}};
 
 use crate::trx::Trx;
 
 const BUFFER_MAX_SIZE: usize = 65535;
 
+#[derive(Debug)]
 pub enum MempoolEvent {
     NewTrx(Trx, String),
     NewMsg(Value),
@@ -27,8 +27,8 @@ impl MempoolWatcher {
             multicast_address: multicast_address.into(),
         }
     }
-    pub fn start(&self) -> Result<Receiver<MempoolEvent>> {
-        let (sender, receiver): (Sender<MempoolEvent>, Receiver<MempoolEvent>) = mpsc::channel();
+    pub fn start(&self) -> Result<UnboundedReceiver<MempoolEvent>> {
+        let (sender, receiver): (UnboundedSender<MempoolEvent>, UnboundedReceiver<MempoolEvent>) = mpsc::unbounded_channel::<MempoolEvent>();
         let udp_socket = self.create_mempool_socket()?;
 
         tokio::spawn(async move {
@@ -39,8 +39,7 @@ impl MempoolWatcher {
                         if let Ok(trx) = serde_json::from_str::<Trx>(&raw_trx.to_string()) {
                             let messages = trx.get_messages();
                             sender
-                                .send(MempoolEvent::NewTrx(trx, raw_trx.to_string()))
-                                .unwrap();
+                                .send(MempoolEvent::NewTrx(trx, raw_trx.to_string())).unwrap();
                             for msg in messages.iter().cloned() {
                                 sender.send(MempoolEvent::NewMsg(msg)).unwrap();
                             }
